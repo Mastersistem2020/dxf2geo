@@ -1,21 +1,10 @@
 services:
   dxf2geo:
     build: .
-    # image: dxf2geo:latest   # use this after: docker build -t dxf2geo .
+    container_name: dxf2geo
+    ports:
+      - "8090:8000"
     volumes:
       - ./input:/input
       - ./output:/output
-    environment:
-      # Set to "true" to keep running and watch for new files
-      WATCH_MODE: "false"
-    restart: "no"   # Change to "unless-stopped" if WATCH_MODE=true
-
-  # Watch-mode variant (always-on, monitors input folder):
-  # dxf2geo-watch:
-  #   build: .
-  #   volumes:
-  #     - /pfad/zu/dxf/dateien:/input
-  #     - /pfad/zu/geo/ausgabe:/output
-  #   environment:
-  #     WATCH_MODE: "true"
-  #   restart: unless-stopped
+    restart: unless-stopped

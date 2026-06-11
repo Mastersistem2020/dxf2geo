@@ -3,24 +3,26 @@ FROM python:3.12-slim
 LABEL description="DXF to TRUMPF GEO Converter"
 LABEL maintainer="sysadmin-homelab.de"
 
-# Install inotify-tools for watch mode
 RUN apt-get update && apt-get install -y --no-install-recommends \
     inotify-tools \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-RUN pip install --no-cache-dir ezdxf
+RUN pip install --no-cache-dir ezdxf fastapi uvicorn python-multipart
 
 WORKDIR /app
+
 COPY converter.py /app/converter.py
+COPY web.py /app/web.py
 COPY entrypoint.sh /app/entrypoint.sh
 
-# Volumes
+RUN chmod +x /app/entrypoint.sh
+
 VOLUME ["/input", "/output"]
 
-# Environment variables with defaults
 ENV INPUT_DIR=/input
 ENV OUTPUT_DIR=/output
 ENV WATCH_MODE=false
 
-ENTRYPOINT ["/app/entrypoint.sh"]
+EXPOSE 8000
+
+CMD ["uvicorn", "web:app", "--host", "0.0.0.0", "--port", "8000"]
