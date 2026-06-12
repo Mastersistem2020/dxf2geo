@@ -1,106 +1,152 @@
 # dxf2geo — DXF to TRUMPF GEO Converter
 
-Converts AutoCAD DXF files to **TRUMPF GEO v1.03** format for use with TRUMPF TruLaser machines (tested on TruLaser 2530).
+A self-hosted Docker tool that converts AutoCAD DXF files into TRUMPF GEO v1.03 format for TRUMPF TruLaser machines.
 
-The original TRUMPF TruTops software that handled this conversion is no longer available. This tool replaces it — runs as a self-hosted Docker container, no Windows required, no license fees.
+The tool provides a simple web interface: upload a `.dxf` file in the browser and download the converted `.GEO` file directly.
 
-## How it works
+Tested with TRUMPF TruLaser 2530 and TRUMPF GEO Viewer.
 
-DXF files go in → GEO files come out.
+## Features
 
-```
-./input/part.dxf  →  ./output/part.GEO
-```
+* Browser-based DXF upload
+* Direct GEO file download
+* Docker image available via Docker Hub
+* No Windows installation required
+* No TruTops installation required for conversion
+* Supports common DXF geometry elements
+* Optional batch/watch mode via input/output folders
 
-## Quick start
-
-### Using Docker Hub (recommended)
+## Docker Hub Image
 
 ```bash
-mkdir -p input output
-cp your_part.dxf input/
-
-docker run --rm \
-  -v ./input:/input \
-  -v ./output:/output \
-  djnord/dxf2geo
+docker pull djnord/dxf2geo:latest
 ```
 
-### Using Docker Compose
+## Quick Start with Docker
+
+```bash
+docker run -d \
+  --name dxf2geo \
+  -p 8090:8000 \
+  -v ./input:/input \
+  -v ./output:/output \
+  --restart unless-stopped \
+  djnord/dxf2geo:latest
+```
+
+Open the web interface:
+
+```text
+http://localhost:8090
+```
+
+Upload a DXF file and download the generated GEO file.
+
+## Docker Compose
 
 ```yaml
 services:
   dxf2geo:
-    image: djnord/dxf2geo
+    image: djnord/dxf2geo:latest
+    container_name: dxf2geo
+    ports:
+      - "8090:8000"
     volumes:
       - ./input:/input
       - ./output:/output
+    restart: unless-stopped
 ```
+
+Start:
 
 ```bash
-docker compose up
+docker compose up -d
 ```
 
-### Watch mode — monitor folder for new files
+Open:
+
+```text
+http://localhost:8090
+```
+
+## Portainer / OMV Stack Example
+
+For Portainer or OpenMediaVault, use absolute paths:
+
+```yaml
+services:
+  dxf2geo:
+    image: djnord/dxf2geo:latest
+    container_name: dxf2geo
+    ports:
+      - "8090:8000"
+    volumes:
+      - /srv/dev-disk-by-uuid-DEINE-UUID/appdata/dxf2geo/input:/input
+      - /srv/dev-disk-by-uuid-DEINE-UUID/appdata/dxf2geo/output:/output
+    restart: unless-stopped
+```
+
+Then open:
+
+```text
+http://SERVER-IP:8090
+```
+
+## Batch / Watch Mode
+
+The container also supports folder-based conversion.
+
+### One-shot conversion
+
+Place DXF files in the input folder and run:
+
+```bash
+docker run --rm \
+  -v ./input:/input \
+  -v ./output:/output \
+  djnord/dxf2geo:latest \
+  /app/entrypoint.sh
+```
+
+### Watch mode
 
 ```bash
 docker run -d \
+  --name dxf2geo-watch \
   -e WATCH_MODE=true \
-  -v /path/to/dxf:/input \
-  -v /path/to/geo:/output \
+  -v ./input:/input \
+  -v ./output:/output \
   --restart unless-stopped \
-  --name dxf2geo \
-  djnord/dxf2geo
+  djnord/dxf2geo:latest \
+  /app/entrypoint.sh
 ```
 
-### Without Docker
+## Supported DXF Entities
 
-```bash
-pip install ezdxf
-python3 converter.py part.dxf
-python3 converter.py *.dxf
-python3 converter.py part.dxf -o output/part.GEO
-```
+| Entity     | Status                                |
+| ---------- | ------------------------------------- |
+| LINE       | Supported                             |
+| ARC        | Supported                             |
+| CIRCLE     | Supported as native GEO `CIR` element |
+| LWPOLYLINE | Supported, including bulge arcs       |
+| POLYLINE   | Supported                             |
+| SPLINE     | Approximated as line segments         |
+| ELLIPSE    | Approximated as line segments         |
 
-## Supported DXF entities
+## Environment Variables
 
-| Entity | Notes |
-|---|---|
-| `LINE` | Full support |
-| `ARC` | Full support |
-| `CIRCLE` | Native `CIR` element in GEO |
-| `LWPOLYLINE` | Full support including bulge arcs |
-| `POLYLINE` | Full support |
-| `SPLINE` | Approximated as line segments (0.1mm tolerance) |
-| `ELLIPSE` | Approximated as line segments |
-
-## Environment variables
-
-| Variable | Default | Description |
-|---|---|---|
-| `INPUT_DIR` | `/input` | Directory to read DXF files from |
-| `OUTPUT_DIR` | `/output` | Directory to write GEO files to |
-| `WATCH_MODE` | `false` | Set to `true` to keep running and watch for new files |
+| Variable   | Default   | Description                         |
+| ---------- | --------- | ----------------------------------- |
+| INPUT_DIR  | `/input`  | Directory for DXF input files       |
+| OUTPUT_DIR | `/output` | Directory for generated GEO files   |
+| WATCH_MODE | `false`   | Set to `true` for folder watch mode |
 
 ## Notes
 
-- Technology parameters (cutting speed, laser power, gas type) are not stored in DXF files. They must be assigned manually in TruTops after import — same as with the original software.
-- Output files use Windows-1252 encoding and CRLF line endings as required by the TRUMPF format.
-- Coordinates are normalized to origin (min x/y = 0) to match TruTops behavior.
-
-## GEO format internals
-
-The TRUMPF GEO v1.03 format was fully reverse-engineered from real machine files. Key findings:
-
-- `ARC` elements use the format `ARC(center, endpoint1, endpoint2, direction)` — the first point is the **arc center**, not a point on the curve.
-- `CIR` elements use `CIR(center_point_index, radius)` for full circles/holes.
-- Contour headers use a fixed attribute code `24` and a hole-count field linking outer contours to their inner cutouts.
-- Files must use Windows-1252 codepage with CRLF line endings — Python's `newline='\r\n'` mode causes double line endings and silent parse failures in the viewer.
-
-## Tested on
-
-- TRUMPF TruLaser 2530
-- TRUMPF GEO Viewer (geoViewer)
+* Technology parameters such as cutting speed, laser power and gas type are not stored in DXF files and must be assigned manually in TRUMPF software after import.
+* Output files use Windows-1252 encoding and CRLF line endings.
+* Coordinates are normalized to origin, so minimum X/Y starts at `0`.
+* The converter was tested with real DXF/GEO files, but every machine workflow should be verified before production use.
 
 ## License
 
